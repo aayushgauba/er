@@ -39,10 +39,20 @@ def voxel_filter(pcd, feature, voxel_size: float, coord_reduction: str = "averag
     # Determine the voxel grid shape from the first batch entry.
     # grid_shape: (X, Y, Z) where X = max index in dimension 0 + 1, etc.
     grid_shape = (vox_idx.max(dim=1).values + 1).cpu().numpy().astype(np.int64)  # shape: (B, 3)
-    grid_shape = tuple(grid_shape[0])  # use first batch entry; e.g., (61, 62, 43)
-    print(f"Debug: vox_idx_np shape: {vox_idx_np.shape}, grid_shape: {grid_shape}")
+    grid_shape = (vox_idx.max(dim=1).values + 1).cpu().numpy().astype(np.int64)  # ideally shape: (B, 3)
 
-    B, N, _ = vox_idx_np.shape
+    # Check if grid_shape is 2D. If it is, use the first batch entry.
+    if grid_shape.ndim == 2:
+        grid_shape = tuple(grid_shape[0])
+    elif grid_shape.ndim == 1:
+        # If it's already 1D, just convert it to a tuple.
+        grid_shape = tuple(grid_shape)
+    else:
+        # Fallback: wrap the scalar in a tuple.
+        grid_shape = (grid_shape,)
+        print(f"Debug: vox_idx_np shape: {vox_idx_np.shape}, grid_shape: {grid_shape}")
+
+        B, N, _ = vox_idx_np.shape
     # Reshape to 2D: (B*N, 3)
     vox_idx_np_reshaped = vox_idx_np.reshape(-1, 3)
     # Clamp indices so that they lie within valid bounds
