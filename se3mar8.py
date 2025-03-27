@@ -2,7 +2,7 @@ import nbformat
 from nbconvert.preprocessors import ExecutePreprocessor
 
 # Path to your notebook file
-notebook_filename = "your_notebook.ipynb"
+notebook_filename = "SE3_Mar8.ipynb"
 
 # Read the notebook
 with open(notebook_filename) as f:
