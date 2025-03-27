@@ -10,7 +10,7 @@ class SE3Demo(Dataset):
         super(SE3Demo, self).__init__()
 
         self.device = device
-        demo = np.load(demo_dir, allow_pickle=True, mmap_mode='r') 
+        demo = np.load(demo_dir, allow_pickle=True) 
         if isinstance(demo, np.ndarray):
             demo = demo.item()
         traj_num, video_len, point_num, _ = demo["xyz"].shape
