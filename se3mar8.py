@@ -9,7 +9,7 @@ with open(notebook_filename) as f:
     nb = nbformat.read(f, as_version=4)
 
 # Create an ExecutePreprocessor instance
-ep = ExecutePreprocessor(timeout=600, kernel_name='python3')
+ep = ExecutePreprocessor(timeout=600, kernel_name='python3.8')
 
 # Execute the notebook
 ep.preprocess(nb, {'metadata': {'path': './'}})
