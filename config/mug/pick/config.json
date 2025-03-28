@@ -37,7 +37,7 @@
         "test_batch_size": 1,
         "train_demo_ratio": 0.8,
         "lr": 5e-4,
-        "epoch": 500,
+        "epoch": 50,
         "distance_threshold": 0.16,
         "pos_warmup_epoch": 1,
         "voxel_size": 0.01,
