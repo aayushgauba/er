@@ -17,6 +17,18 @@ import argparse
 from torch.optim.lr_scheduler import StepLR
 
 # %%
+import logging
+import sys
+
+# Configure logging: This will log both to the console and to a file.
+logging.basicConfig(
+    level=logging.INFO,  # Set this to DEBUG for more detailed output
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),  # Output to console
+        logging.FileHandler("training.log", mode="w")  # Write to training.log
+    ]
+)
 all_cfg = OmegaConf.load(f"config/mug/pick/config.json")
 cfg = all_cfg.mani
 cfg_seg = all_cfg.seg
@@ -212,7 +224,7 @@ for epoch in range(cfg.epoch):
     progress_bar = tqdm(train_loader, desc=f"Epoch {epoch}/{cfg.epoch}")
     model.train()
 
-    print("test")
+    logging.info("test")
 
     for i, data in enumerate(progress_bar):
         optm.zero_grad()
@@ -225,12 +237,12 @@ for epoch in range(cfg.epoch):
             mask_part=cfg.mask_part,
         )
 
-#        print((output_pos[0][0]))
-#        print(data["seg_center"])
+#        logging.info((output_pos[0][0]))
+#        logging.info(data["seg_center"])
     
         loss = loss_fn(output_pos[0], data["seg_center"])
-        print(loss)
-        print(type(loss))
+        logging.info(loss)
+        logging.info(type(loss))
         loss.requires_grad = True
         loss.backward()
         optm.step()
@@ -254,12 +266,12 @@ for epoch in range(cfg.epoch):
 
             test_loss += t_loss.item()
         test_loss /= len(test_loader)
-        print("Epoch: ", epoch, " seg test loss: ", test_loss)
+        logging.info("Epoch: ", epoch, " seg test loss: ", test_loss)
 
         if test_loss < best_test_loss:
             best_test_loss = test_loss
             torch.save(model.state_dict(), os.path.join(wd, f"segnet.pth"))
-            print("Model saved!")
+            logging.info("Model saved!")
 
     scheduler.step()
 
@@ -523,11 +535,11 @@ for epoch in range(cfg.epoch):
 
         test_pos_loss /= len(test_loader)
         test_ori_loss /= len(test_loader)
-        print("Epoch: ", epoch, " test pos loss: ", test_pos_loss, " test ori loss: ", test_ori_loss)
+        logging.info("Epoch: ", epoch, " test pos loss: ", test_pos_loss, " test ori loss: ", test_ori_loss)
         if test_pos_loss + test_ori_loss < best_test_loss:
             best_test_loss = test_pos_loss + test_ori_loss
             torch.save(model_mani.state_dict(), os.path.join(wd, f"maninet.pth"))
-            print("Model saved!")
+            logging.info("Model saved!")
 
     scheduler.step()
 
