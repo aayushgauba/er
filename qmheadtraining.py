@@ -15,23 +15,9 @@ from transforms3d.euler import euler2mat
 from transforms3d.axangles import axangle2mat, mat2axangle
 from copy import deepcopy
 
-import logging
-import sys
-
-# Configure logging: This will log both to the console and to a file.
-logging.basicConfig(
-    level=logging.INFO,  # Set this to DEBUG for more detailed output
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),  # Output to console
-        logging.FileHandler("training.log", mode="w")  # Write to training.log
-    ]
-)
-
 def calculate_norm_loss(output_directions):
-    # calculate ||R^T*R - R_trace||_F
     R = output_directions.reshape(-1, 3, 3)
-    R = torch.bmm(R.permute(0, 2, 1), R)    # column-wise
+    R = torch.bmm(R.permute(0, 2, 1), R)
     norm_loss = (torch.bmm(R.permute(0, 2, 1), R) - torch.eye(3).repeat(R.shape[0], 1, 1).to(output_directions.device)).norm()
 
     return norm_loss
@@ -49,7 +35,7 @@ def geodesic_distance_between_R(R1, R2):
     R1_T = R1.transpose(1, 2)
     R = torch.einsum("bmn,bnk->bmk", R1_T, R2)
     diagonals = torch.diagonal(R, dim1=1, dim2=2)
-    traces = torch.sum(diagonals, dim=1).unsqueeze(1)   # [bs]
+    traces = torch.sum(diagonals, dim=1).unsqueeze(1)
     dist = torch.abs(torch.arccos((traces - 1)/2))
 
     return dist
@@ -60,7 +46,7 @@ def double_geodesic_distance_between_poses(T1, T2, return_both=False):
 
     dist_R_square = geodesic_distance_between_R(R_1, R_2) ** 2
     dist_t_square = torch.sum((t_1-t_2) ** 2, dim=1)
-    dist = torch.sqrt(dist_R_square.squeeze(-1) + dist_t_square)    # [bs]
+    dist = torch.sqrt(dist_R_square.squeeze(-1) + dist_t_square)
 
     if return_both:
         return torch.sqrt(dist_t_square).mean(), torch.sqrt(dist_R_square).mean()
@@ -135,7 +121,7 @@ def seg_pointcloud(xyz, rgb, reference_point, distance=0.3, extra_data=None):
                 continue
             data[k] = extra_data[k][distances < distance]
             if torch.isnan(data[k]).any():
-                logging.info("Nan detected!")
+                print("Nan detected!")
     return data
 
 
@@ -181,7 +167,7 @@ def downsample_table(data, reference_rgb=[0.1176, 0.4392, 0.4078], total_points=
 
         xyz = torch.cat([table_xyz[random_indices], non_table_xyz], dim=0)
         rgb = torch.cat([table_rgb[random_indices], non_table_rgb], dim=0)
-    else:   # all from objects
+    else:
         random_indices = torch.randperm(non_table_xyz.shape[0])[:total_points]
 
         xyz = non_table_xyz[random_indices]
@@ -196,7 +182,6 @@ def jitter(data, std=0.03):
     return data
 
 def random_dropping_color(data, drop_ratio=0.3):
-    # randomly remove some points' RGB to [0,0,0]
     N = data["xyz"].shape[0]
     mask = np.random.choice([0, 1], size=N, replace=True, p=[1-drop_ratio, drop_ratio])
     data["rgb"][np.where(mask)] = torch.tensor([0., 0., 0.]).to(data["rgb"].device)
@@ -208,24 +193,19 @@ def color_jitter(data, std=0.005):
     return data
 
 def zero_color(data):
-    # remove all color
     data["rgb"] = torch.zeros_like(data["rgb"])
     return data
 
 from torchvision.transforms import functional as TF
 def hsv_transform(data, hue_shift_range=[-0.4, 0.4], sat_shift_range=[0.5, 1.5], val_shift_range=[0.5, 2]):
-    img_rgb = data["rgb"].T.unsqueeze(-1) # [N, 3] -> [3, N] -> [3, N, 1], and the adjust functions requires [3, H, W]
-
+    img_rgb = data["rgb"].T.unsqueeze(-1)
     hue_shift = np.random.random_sample() * (hue_shift_range[1] - hue_shift_range[0]) + hue_shift_range[0]
     sat_shift = np.random.random_sample() * (sat_shift_range[1] - sat_shift_range[0]) + sat_shift_range[0]
     val_shift = np.random.random_sample() * (val_shift_range[1] - val_shift_range[0]) + val_shift_range[0]
-
     img_rgb = TF.adjust_hue(img_rgb, hue_factor=hue_shift)
     img_rgb = TF.adjust_saturation(img_rgb, saturation_factor=sat_shift)
     img_rgb = TF.adjust_brightness(img_rgb, brightness_factor=val_shift)
-
     data["rgb"] = img_rgb.squeeze(-1).T
-
     return data
 
 import potpourri3d as pp3d
@@ -233,44 +213,30 @@ def geodesic_distance_from_pcd(point_cloud, keypoint_index):
     if isinstance(point_cloud, torch.Tensor):
         point_cloud = point_cloud.cpu().numpy()
     solver = pp3d.PointCloudHeatSolver(point_cloud)
-
-    # Compute the geodesic distance to point 4
     dists = solver.compute_distance(keypoint_index)
-
     return torch.from_numpy(dists).float()
 
 def get_heatmap(point_cloud, keypoint_index, distance="geodesic", max_value = 10.0, std_dev=0.005):
-    # distance: "l2" or "geodesic"
-
-    # Extract keypoint coordinates
     keypoint = point_cloud[keypoint_index]
     if distance == "l2":
-        # Compute the L2 distance from the keypoint to all other points
         distances = torch.norm(point_cloud - keypoint, dim=1)
     elif distance == "geodesic":
-        # Compute the geodesic distance from the keypoint to all other points
         distances = geodesic_distance_from_pcd(point_cloud, keypoint_index)
     heatmap_values = torch.exp(-0.5 * (distances / std_dev) ** 2)
     heatmap_values /= torch.max(heatmap_values)
-
     heatmap_values *= max_value
-
     return heatmap_values
 
 import random
 
 def mask_part_point_cloud(xyz, rgb, mask_radius=0.015):
     N, _ = xyz.shape
-
     center_idx = random.randint(0, N-1)
     center_point = xyz[center_idx]
-
     distances = torch.sqrt(torch.sum((xyz - center_point) ** 2, dim=1))
     mask = distances < mask_radius
-
     masked_point_cloud = xyz[~mask]
     masked_rgb = rgb[~mask]
-
     return {
         "xyz": masked_point_cloud,
         "rgb": masked_rgb,
@@ -286,9 +252,9 @@ class UnitaryComplexLinear(nn.Module):
         self.weight_imag = nn.Parameter(torch.randn(out_features, in_features))
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        weight_complex = self.weight_real + 1j * self.weight_imag  # (out_features, in_features)
+        weight_complex = self.weight_real + 1j * self.weight_imag
         Q, _ = torch.linalg.qr(weight_complex)
-        out = x @ Q.conj().T  # x shape (..., in_features)
+        out = x @ Q.conj().T
         return out
 
 
@@ -339,11 +305,11 @@ class QuantumMultiHeadSelfAttention(nn.Module):
         scores = torch.matmul(q, k.conj().transpose(-1, -2)) / (D ** 0.5)
         scores_mag = torch.abs(scores) * self.amplification
         attn_weights = F.softmax(scores_mag, dim=-1)
-        attn_weights = attn_weights.to(dtype=v.dtype)  # cast to complex type
-        out = torch.matmul(attn_weights, v)  # (B, H, N, D) complex
+        attn_weights = attn_weights.to(dtype=v.dtype)
+        out = torch.matmul(attn_weights, v)
         out = out.permute(0, 2, 1, 3).reshape(B, N, self.embed_dim)
         out = self.phase_gate(out)
-        out_complex = self.linear_out(out)  # complex tensor
+        out_complex = self.linear_out(out)
         out_real = out_complex.real + 0.1 * out_complex.imag
         return out_real
 
@@ -424,102 +390,42 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     all_cfg = OmegaConf.load("config/mug/pick/config.json")
     cfg = all_cfg.mani
-    cfg_seg = all_cfg.seg
-
     wd = os.path.join("experiments", "mug", "pick")
-    os.makedirs(wd, exist_ok=True)
-    demo_path = os.path.join("data", "mug", "pick", "demos.npz")
-
-    demo = SE3Demo(demo_path, data_aug=cfg.data_aug, aug_methods=cfg.aug_methods, device=str(device))
-    train_size = int(len(demo) * cfg.train_demo_ratio)
-    test_size = len(demo) - train_size
-    train_dataset, test_dataset = random_split(demo, [train_size, test_size])
-
-    train_loader = DataLoader(train_dataset, batch_size=cfg.train_batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=cfg.test_batch_size, shuffle=False)
-
+    demo_path = os.path.join("data", "mug", "pick", "demo.npz")
+    demo = SE3Demo(demo_path, data_aug=False, device=str(device))
+    test_loader = DataLoader(demo, batch_size=cfg.test_batch_size, shuffle=False)
     model = QuantumManiModel(
         voxelize=True,
         voxel_size=0.01,
         radius_threshold=0.12,
         feature_point_radius=0.02
     ).to(device)
-
-    optm = torch.optim.Adam(model.parameters(), lr=0.001)
-    scheduler = StepLR(optm, step_size=int(cfg.epoch / 5), gamma=0.5)
-    loss_fn = nn.MSELoss()
-    best_test_loss = float("inf")
-
-    for epoch in range(cfg.epoch):
-        progress_bar = tqdm(train_loader, desc=f"Epoch {epoch}/{cfg.epoch}")
-        model.train()
-        for data in progress_bar:
+    
+    checkpoint_path = os.path.join(wd, "quantum_mani_best.pth")
+    model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+    model.eval()
+    all_pos_preds = []
+    all_ori_preds = []
+    with torch.no_grad():
+        for data in tqdm(test_loader, desc="Testing"):
             xyz_b = data["xyz"].to(device)
             rgb_b = data["rgb"].to(device)
-            seg_center_b = data["seg_center"].to(device)
-            axes_b = data["axes"].to(device)
-
-            optm.zero_grad()
-            with torch.no_grad():
-                ref_pos, _ = model({"xyz": xyz_b, "rgb": rgb_b},
-                                   random_drop=False,
-                                   mask_part=cfg.mask_part)
-            training_ref_point = (ref_pos if cfg.ref_point == "seg_net"
-                                  else seg_center_b if cfg.ref_point == "gt"
-                                  else None)
-
+            ref_point = data["seg_center"].to(device)
+            
             out_pos, out_dir = model({"xyz": xyz_b, "rgb": rgb_b},
-                                     train_pos=True,
-                                     reference_point=training_ref_point,
+                                     train_pos=False,
+                                     reference_point=ref_point,
                                      distance_threshold=cfg.distance_threshold,
-                                     random_drop=cfg.random_drop,
+                                     random_drop=False,
                                      mask_part=cfg.mask_part)
-
-            pos_loss = loss_fn(out_pos, seg_center_b)
-            ori_loss = loss_fn(out_dir, axes_b)
-            total_loss = pos_loss if epoch < cfg.pos_warmup_epoch else pos_loss + 0.1 * ori_loss
-
-            total_loss.backward()
-            optm.step()
-            Bsz = axes_b.shape[0]
-            T1 = torch.zeros([Bsz, 4, 4], device=device)
-            T2 = torch.zeros_like(T1)
-            T1[:, :3, :3] = axes_b.reshape(Bsz, 3, 3).transpose(1, 2)
-            T1[:, :3, 3] = seg_center_b
-            T1[:, 3, 3] = 1.0
-            T2[:, :3, :3] = out_dir.reshape(Bsz, 3, 3).transpose(1, 2)
-            T2[:, :3, 3] = out_pos
-            T2[:, 3, 3] = 1.0
-            t_loss, r_loss = double_geodesic_distance_between_poses(T1, T2, return_both=True)
-            progress_bar.set_postfix(pos_loss=t_loss.item(), ori_loss=r_loss.item())
-
-        model.eval()
-        test_pos_loss, test_ori_loss = 0.0, 0.0
-        with torch.no_grad():
-            for data in test_loader:
-                xyz_b = data["xyz"].to(device)
-                rgb_b = data["rgb"].to(device)
-                seg_center_b = data["seg_center"].to(device)
-                axes_b = data["axes"].to(device)
-
-                out_pos, out_dir = model({"xyz": xyz_b, "rgb": rgb_b},
-                                         train_pos=False,
-                                         reference_point=seg_center_b,
-                                         distance_threshold=cfg.distance_threshold,
-                                         random_drop=False,
-                                         mask_part=cfg.mask_part)
-                test_pos_loss += loss_fn(out_pos, seg_center_b).item()
-                test_ori_loss += loss_fn(out_dir, axes_b).item()
-
-            test_pos_loss /= len(test_loader)
-            test_ori_loss /= len(test_loader)
-            logging.info(f"Epoch {epoch}: test pos loss={test_pos_loss}, test ori loss={test_ori_loss}")
-            if test_pos_loss + test_ori_loss < best_test_loss:
-                best_test_loss = test_pos_loss + test_ori_loss
-                torch.save(model.state_dict(), os.path.join("experiments", "mug", "pick", "quantum_mani_best.pth"))
-                logging.info("Model saved!")
-        scheduler.step()
-
-
+            all_pos_preds.append(out_pos.cpu().numpy())
+            all_ori_preds.append(out_dir.cpu().numpy())
+    
+    all_pos_preds = np.concatenate(all_pos_preds, axis=0)
+    all_ori_preds = np.concatenate(all_ori_preds, axis=0)
+    
+    np.savez("pred_pose.npz", positions=all_pos_preds, orientations=all_ori_preds)
+    print("Predictions saved to pred_pose.npz")
+    
 if __name__ == "__main__":
     main()
