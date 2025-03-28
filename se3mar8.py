@@ -293,7 +293,7 @@ cfg_seg = all_cfg.seg
 # %%
 wd = os.path.join("experiments", "mug", "pick")
 os.makedirs(wd, exist_ok=True)
-demo_path = os.path.join("data", "mug", "pick", "demos.npz")
+demo_path = os.path.join("data", "mug", "pick", "demo.npz")
 
 # %%
 
