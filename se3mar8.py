@@ -266,7 +266,7 @@ for epoch in range(cfg.epoch):
 
             test_loss += t_loss.item()
         test_loss /= len(test_loader)
-        logging.info("Epoch: ", epoch, " seg test loss: ", test_loss)
+        logging.info(f"Epoch: , {epoch},  seg test loss: , {test_loss}")
 
         if test_loss < best_test_loss:
             best_test_loss = test_loss
@@ -535,7 +535,7 @@ for epoch in range(cfg.epoch):
 
         test_pos_loss /= len(test_loader)
         test_ori_loss /= len(test_loader)
-        logging.info("Epoch: ", epoch, " test pos loss: ", test_pos_loss, " test ori loss: ", test_ori_loss)
+        logging.info(f"Epoch: {epoch},  test pos loss: , {test_pos_loss},  test ori loss: , {test_ori_loss}")
         if test_pos_loss + test_ori_loss < best_test_loss:
             best_test_loss = test_pos_loss + test_ori_loss
             torch.save(model_mani.state_dict(), os.path.join(wd, f"maninet.pth"))
