@@ -202,6 +202,9 @@ class Model(nn.Module):
 # %%
 model = Model()
 model.to("cpu")
+model.load_state_dict(torch.load("experiments/mug/pick/segnet.pth"))
+model.eval()
+
 
 # %%
 optm = torch.optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False)
@@ -355,7 +358,7 @@ class Model_mani(nn.Module):
                 save_pcd_as_pcd(inputs["xyz"][i], inputs["rgb"][i], save_file=f"pcd/mani/original_{pcd_name}_{i}.pcd")
 
 #                gt_heatmaps.append(get_heatmap(inputs["xyz"][i], closest_point_idx, std_dev=0.015, max_value=1).to(self.pos_net.device))
-                gt_heatmaps.append(get_heatmap(inputs["xyz"][i], closest_point_idx, std_dev=0.015, max_value=1).to("cuda"))
+                gt_heatmaps.append(get_heatmap(inputs["xyz"][i], closest_point_idx, std_dev=0.015, max_value=1).to("cpu"))
                 save_pcd_as_pcd(inputs["xyz"][i], gt_heatmaps[-1].unsqueeze(-1).repeat(1, 3)/torch.max(gt_heatmaps[-1]), save_file=f"pcd/mani/gt_heatmap_{pcd_name}_{i}.pcd", draw_heatmap=True)
 
             if reference_point != None:
@@ -381,7 +384,7 @@ class Model_mani(nn.Module):
             feature = seg_output["feature"]
             pos_weights = []
 
-            output_pos = torch.zeros([len(xyz), 3]).to("cuda")
+            output_pos = torch.zeros([len(xyz), 3]).to("cpu")
             for i in range(len(xyz)):
                 if draw_pcd:
                     save_pcd_as_pcd(xyz[i], feature[i][:, 0].clone().unsqueeze(-1).repeat(1, 3)/torch.max(feature[i][:, 0].clone()), save_file=f"pcd/mani/pos_heatmap_{pcd_name}_{i}.pcd", draw_heatmap=True)
@@ -397,7 +400,7 @@ class Model_mani(nn.Module):
                 pos_weights = []
 
 #                output_pos = torch.zeros([len(xyz), 3]).to(self.device)
-                output_pos = torch.zeros([len(xyz), 3]).to("cuda")
+                output_pos = torch.zeros([len(xyz), 3]).to("cpu")
                 for i in range(len(xyz)):
                     if draw_pcd:
                         save_pcd_as_pcd(xyz[i], feature[i][:, 0].clone().unsqueeze(-1).repeat(1, 3)/torch.max(feature[i][:, 0].clone()), save_file=f"pcd/mani/pos_heatmap_{pcd_name}_{i}.pcd", draw_heatmap=True)
@@ -416,7 +419,7 @@ class Model_mani(nn.Module):
         xyz = ori_output["xyz"]
         feature = ori_output["feature"]    # 3*3 = 9
 #        output_ori = torch.zeros([len(xyz), 9]).to(self.device)
-        output_ori = torch.zeros([len(xyz), 9]).to("cuda")
+        output_ori = torch.zeros([len(xyz), 9]).to("cpu")
 
         if save_ori_feature:
             for i in range(len(xyz)):
@@ -439,7 +442,14 @@ class Model_mani(nn.Module):
 
 # %%
 model_mani = Model_mani()
-model_mani.to("cuda")
+model_mani.to("cpu")
+if cfg.resume:
+    mani_ckpt = os.path.join(wd, "maninet.pth")
+    if os.path.exists(mani_ckpt):
+        model_mani.load_state_dict(torch.load(mani_ckpt))
+        logging.info(f"✅ Resumed manipulation model from {mani_ckpt}")
+    else:
+        logging.warning(f"⚠️  maninet.pth not found at {mani_ckpt}")
 
 # %%
 optm = torch.optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False)
@@ -492,8 +502,8 @@ for epoch in range(cfg.epoch):
         optm.step()
 
         with torch.no_grad():
-            T1 = torch.zeros([data["axes"].shape[0], 4, 4]).to("cuda")
-            T2 = torch.zeros_like(T1).to("cuda")
+            T1 = torch.zeros([data["axes"].shape[0], 4, 4]).to("cpu")
+            T2 = torch.zeros_like(T1).to("cpu")
             T1[:, :3, :3] = data["axes"].reshape(data["axes"].shape[0], 3, 3).transpose(1,2)
             T1[:, :3, 3] = data["seg_center"]
             T1[:, 3, 3] = 1.
@@ -521,8 +531,8 @@ for epoch in range(cfg.epoch):
             pos_loss = loss_fn(output_pos, data["seg_center"])
             ori_loss = loss_fn(output_direction, data["axes"])
 
-            T1 = torch.zeros([data["axes"].shape[0], 4, 4]).to("cuda")
-            T2 = torch.zeros_like(T1).to("cuda")
+            T1 = torch.zeros([data["axes"].shape[0], 4, 4]).to("cpu")
+            T2 = torch.zeros_like(T1).to("cpu")
             T1[:, :3, :3] = data["axes"].reshape(data["axes"].shape[0], 3, 3).transpose(1,2)
             T1[:, :3, 3] = data["seg_center"]
             T1[:, 3, 3] = 1.

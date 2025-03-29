@@ -15,7 +15,9 @@
         "lr": 1e-3,
         "epoch": 200,
         "voxel_size": 0.01,
-        "radius_threshold": 0.1
+        "radius_threshold": 0.1,
+        "resume": true
+
     },
     "mani": {
         "model": "SE3ManiNet",
@@ -42,7 +44,9 @@
         "pos_warmup_epoch": 1,
         "voxel_size": 0.01,
         "radius_threshold": 0.07,
-        "feature_point_radius": 0.02
+        "feature_point_radius": 0.02,
+        "resume": true
+
     }
 
 }
