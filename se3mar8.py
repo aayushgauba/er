@@ -37,7 +37,7 @@ cfg_seg = all_cfg.seg
 wd = os.path.join("experiments", "mug", "pick")
 os.makedirs(wd, exist_ok=True)
 # demo_path = os.path.join("data", "mug", "pick", "demos.npz")
-demo_path = os.path.join("data", "mug", "pick", "demo.npz")
+demo_path = os.path.join("data", "mug", "pick", "demos.npz")
 
 # %%
 demo = SE3Demo(demo_path, data_aug=cfg.data_aug, aug_methods=cfg.aug_methods, device="cpu") 
@@ -199,11 +199,18 @@ class Model(nn.Module):
             output_ori[:, 3*i:3*(i+1)] /= (torch.norm(output_ori[:, 3*i:3*(i+1)].clone(), dim=1).unsqueeze(1) + 1e-8)
         return output_pos, output_ori
 
-# %%
 model = Model()
 model.to("cpu")
-model.load_state_dict(torch.load("experiments/mug/pick/segnet.pth"))
-model.eval()
+
+segnet_ckpt = os.path.join(wd, "segnet.pth")
+start_epoch = 50
+best_test_loss = 1e5
+
+if cfg.resume and os.path.exists(segnet_ckpt):
+    model.load_state_dict(torch.load(segnet_ckpt))
+    logging.info(f"✅ Resumed model weights from {segnet_ckpt}")
+else:
+    logging.warning(f"⚠️  segnet.pth not found at {segnet_ckpt}")
 
 
 # %%
@@ -223,7 +230,7 @@ best_test_loss = 1e5
 #torch.set_grad_enabled(True)
 
 # %%
-for epoch in range(cfg.epoch):
+for epoch in range(start_epoch, cfg.epoch):
     progress_bar = tqdm(train_loader, desc=f"Epoch {epoch}/{cfg.epoch}")
     model.train()
 
@@ -296,7 +303,7 @@ cfg_seg = all_cfg.seg
 # %%
 wd = os.path.join("experiments", "mug", "pick")
 os.makedirs(wd, exist_ok=True)
-demo_path = os.path.join("data", "mug", "pick", "demo.npz")
+demo_path = os.path.join("data", "mug", "pick", "demos.npz")
 
 # %%
 
