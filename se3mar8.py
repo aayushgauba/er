@@ -530,7 +530,7 @@ for epoch in range(cfg.epoch):
             )
             pos_loss = loss_fn(output_pos, data["seg_center"])
             ori_loss = loss_fn(output_direction, data["axes"])
-
+            logging.info(f"Epoch: {epoch}, pos loss: , {pos_loss}, ori loss: , {ori_loss}")
             T1 = torch.zeros([data["axes"].shape[0], 4, 4]).to("cpu")
             T2 = torch.zeros_like(T1).to("cpu")
             T1[:, :3, :3] = data["axes"].reshape(data["axes"].shape[0], 3, 3).transpose(1,2)
